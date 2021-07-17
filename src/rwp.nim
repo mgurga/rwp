@@ -1,7 +1,9 @@
-import httpclient, json, random, cligen, os
+import httpclient, json, random, cligen, os, strutils, algorithm, times
 
 proc rwp(subs:seq[string]= @["wallpaper", "HI_Res", "MinimalWallpaper"],
-         usenitrogen:bool=true):int=
+         wpcommand:string="nitrogen --set-zoom-fill %p",
+         wpfoldername:string="wp",
+         maxfilesinwp:int=5):int=
   var client = newHttpClient()
   var candidates: seq[string] 
 
@@ -14,14 +16,30 @@ proc rwp(subs:seq[string]= @["wallpaper", "HI_Res", "MinimalWallpaper"],
     if (imgurl.contains("jpg") or imgurl.contains("png")):
       candidates.add(imgurl)
 
-  os.createDir("wp")
+  createDir(wpfoldername)
+  var files: seq[(string, FileInfo)]
+  for kind, path in walkDir(wpfoldername):
+    files.add((path, getFileInfo(path)))
+
+  proc filedatecmp(x:(string, FileInfo), y: (string, FileInfo)):int =
+    if x[1].lastWriteTime > y[1].lastWriteTime: return -1
+    elif x[1].lastWriteTime == y[1].lastWriteTime: return 0
+    else: 1
+
+  files.sort(filedatecmp)
+  echo("oldest file: " & files[files.len - 1][0])
+  echo("amount of files: " & $files.len)
+  if files.len > maxfilesinwp:
+    for i in 0..(files.len - maxfilesinwp):
+      echo("removing file: " & files[files.len - 1][0])
+      removeFile(files[files.len - 1][0])
+      files.delete(files.len - 1);
 
   var selurl = sample(candidates)
   var filename = selurl.split("/")[selurl.split("/").len - 1]
-  client.downloadFile(selurl, "wp/" & filename)
+  client.downloadFile(selurl, wpfoldername & "/" & filename)
 
-  if usenitrogen:
-    discard execShellCmd("nitrogen --set-zoom-fill wp/" & filename)
+  discard execShellCmd(wpcommand.replace("%p", "wp/" & filename))
 
   result = 1
 
